@@ -28,13 +28,15 @@ body{font-family:'Courier New',monospace;background:#f5e6c8;color:#111;min-heigh
 .mxbtn:disabled{opacity:.28;cursor:default;}
 .status{font-size:8px;color:#00a8b5;background:#e8f8f8;border:1px solid #b8e8ee;border-radius:3px;padding:6px 10px;margin-bottom:10px;letter-spacing:.04em;min-height:26px;line-height:1.7;}
 .pbar-wrap{background:#e0d0b8;border-radius:2px;height:8px;margin-bottom:10px;overflow:hidden;display:none;}
-.pbar{height:100%;background:#d4651a;width:0%;transition:width .3s;}
+.pbar{height:100%;background:#d4651a;width:0%;transition:width .5s;}
 .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;}
 .info-cell{background:#f5e6c8;border:1px solid #d4b890;border-radius:3px;padding:6px 8px;}
 .info-cell .ik{font-size:6px;color:#999;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;}
 .info-cell .iv{font-size:9px;color:#d4651a;font-weight:700;letter-spacing:.04em;}
 .note{font-size:7px;color:#aaa;line-height:1.8;letter-spacing:.03em;margin-top:12px;}
 .note b{color:#d4651a;}
+.preview-wrap{display:none;margin-bottom:10px;}
+.preview-wrap video{width:100%;border-radius:3px;border:1px solid #d4b890;background:#111;}
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(12px);background:#d4651a;color:#fff;font-family:'Courier New',monospace;font-size:9px;padding:6px 14px;border-radius:3px;letter-spacing:.06em;opacity:0;transition:all .2s;z-index:999;pointer-events:none;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -46,7 +48,7 @@ body{font-family:'Courier New',monospace;background:#f5e6c8;color:#111;min-heigh
 <div class="hdr">
   <div class="ht">
     <h1>abbies® Boon Video Muxer</h1>
-    <p>WebM + Audio → MP4 · Runs in browser · No upload</p>
+    <p>WebM + Audio → Muxed WebM · No install · No CDN · Works everywhere</p>
   </div>
   <div class="hsp"></div>
 </div>
@@ -71,21 +73,28 @@ body{font-family:'Courier New',monospace;background:#f5e6c8;color:#111;min-heigh
     <div class="info-grid">
       <div class="info-cell"><div class="ik">Video</div><div class="iv" id="infoVideo">—</div></div>
       <div class="info-cell"><div class="ik">Audio</div><div class="iv" id="infoAudio">—</div></div>
-      <div class="info-cell"><div class="ik">ffmpeg</div><div class="iv" id="infoFFmpeg">Loading...</div></div>
-      <div class="info-cell"><div class="ik">Status</div><div class="iv" id="infoStatus">Starting</div></div>
+      <div class="info-cell"><div class="ik">Duration</div><div class="iv" id="infoDur">—</div></div>
+      <div class="info-cell"><div class="ik">Status</div><div class="iv" id="infoStatus">Waiting</div></div>
     </div>
 
-    <div class="status" id="statusMsg"><span class="spinner"></span>Loading ffmpeg — please wait...</div>
+    <div class="status" id="statusMsg">Drop your WebM video and music file to begin</div>
     <div class="pbar-wrap" id="pbarWrap"><div class="pbar" id="pbar"></div></div>
 
-    <button class="mxbtn" id="mxBtn" disabled onclick="startMux()">⚡ Mux to MP4</button>
+    <button class="mxbtn" id="mxBtn" disabled onclick="startMux()">⚡ Mux Together</button>
+
+    <div class="preview-wrap" id="previewWrap">
+      <video id="previewVid" controls></video>
+    </div>
 
     <div class="note">
-      <b>How it works:</b> FFmpeg runs entirely inside your browser tab via WebAssembly.
-      Your files never leave your machine. Video + audio are muxed into a single
-      post-ready MP4 and downloaded directly.<br><br>
-      <b>First load:</b> FFmpeg core downloads once (~10MB) and is cached.
-      Every visit after that is instant.
+      <b>How it works:</b> Your video and audio are played back simultaneously
+      in real time while MediaRecorder captures both streams into a single muxed
+      WebM file. No external libraries, no CDN, no upload — works everywhere.<br><br>
+      <b>Output:</b> A muxed WebM containing your video + audio together.
+      Drag it into CapCut or any editor to export as MP4, or post directly
+      to platforms that accept WebM.<br><br>
+      <b>Duration:</b> The mux runs for the length of your audio track in real time.
+      A 3 minute track takes 3 minutes to mux.
     </div>
 
   </div>
@@ -93,9 +102,20 @@ body{font-family:'Courier New',monospace;background:#f5e6c8;color:#111;min-heigh
 
 <div class="toast" id="T"></div>
 
+<!-- Hidden elements for playback -->
+<video id="vidEl" style="display:none" playsinline></video>
+<audio id="audEl" style="display:none"></audio>
+<canvas id="muxCanvas" style="display:none"></canvas>
+
 <script>
-// ─── STATE ───────────────────────────────────────────────────────────────────
-var videoFile = null, audioFile = null, ffmpegReady = false, muxing = false;
+var videoFile = null, audioFile = null;
+var videoDuration = 0, audioDuration = 0;
+var muxing = false;
+
+var vidEl  = document.getElementById('vidEl');
+var audEl  = document.getElementById('audEl');
+var muxC   = document.getElementById('muxCanvas');
+var muxCtx = muxC.getContext('2d');
 
 // ─── DROP ZONES ──────────────────────────────────────────────────────────────
 function makeDrop(id, accept, onFiles){
@@ -113,182 +133,168 @@ makeDrop('dzVideo','video/*,.webm',function(files){
   var f=files.find(function(f){return f.type.startsWith('video/')||f.name.match(/\.(webm|mp4|mov)$/i);});
   if(!f){toast('Drop a video file (.webm)');return;}
   videoFile=f;
+  var url=URL.createObjectURL(f);
+  vidEl.src=url;
+  vidEl.onloadedmetadata=function(){
+    videoDuration=vidEl.duration;
+    muxC.width=vidEl.videoWidth||1080;
+    muxC.height=vidEl.videoHeight||1920;
+    document.getElementById('infoVideo').textContent=f.name.split('.').pop().toUpperCase()+' \u00b7 '+fmtSize(f.size);
+    updateDurInfo();
+    checkReady();
+  };
   document.getElementById('dzVideoLabel').textContent=f.name+' \u00b7 '+fmtSize(f.size);
   document.getElementById('dzVideo').classList.add('has-file');
-  document.getElementById('infoVideo').textContent=f.name.split('.').pop().toUpperCase()+' \u00b7 '+fmtSize(f.size);
-  checkReady();
 });
 
 makeDrop('dzAudio','audio/*',function(files){
   var f=files.find(function(f){return f.type.startsWith('audio/')||f.name.match(/\.(mp3|wav|ogg|m4a|aac)$/i);});
   if(!f){toast('Drop an audio file');return;}
   audioFile=f;
+  var url=URL.createObjectURL(f);
+  audEl.src=url;
+  audEl.onloadedmetadata=function(){
+    audioDuration=audEl.duration;
+    document.getElementById('infoAudio').textContent=f.name.split('.').pop().toUpperCase()+' \u00b7 '+fmtSize(f.size);
+    updateDurInfo();
+    checkReady();
+  };
   document.getElementById('dzAudioLabel').textContent=f.name+' \u00b7 '+fmtSize(f.size);
   document.getElementById('dzAudio').classList.add('has-file');
-  document.getElementById('infoAudio').textContent=f.name.split('.').pop().toUpperCase()+' \u00b7 '+fmtSize(f.size);
-  checkReady();
 });
 
+function updateDurInfo(){
+  var d = audioDuration || videoDuration;
+  if(d) document.getElementById('infoDur').textContent = fmtTime(Math.round(d));
+}
+
 function checkReady(){
-  if(videoFile && audioFile && ffmpegReady){
+  if(videoFile && audioFile){
     document.getElementById('mxBtn').disabled=false;
-    setStatus('Both files loaded \u2014 hit \u26a1 Mux to MP4');
     document.getElementById('infoStatus').textContent='Ready';
-  } else if(videoFile && audioFile && !ffmpegReady){
-    setStatus('<span class="spinner"></span>Files loaded \u2014 ffmpeg still loading, almost there...');
+    setStatus('Both files loaded \u2014 hit \u26a1 Mux Together');
   }
 }
-
-// ─── FFMPEG VIA IMPORTSCRIPTS WORKER APPROACH ────────────────────────────────
-// Use a blob worker to run ffmpeg.wasm which sidesteps COOP/COEP issues
-// by using the older 0.11.x API with unpkg CDN
-
-var workerBlob, workerURL, worker;
-
-function initFFmpegWorker(){
-  // Inline worker that loads ffmpeg 0.11.x (no SharedArrayBuffer needed in this mode)
-  var workerCode = `
-    importScripts('https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js');
-
-    var ffmpeg = FFmpeg.createFFmpeg({
-      log: false,
-      progress: function(p){
-        postMessage({type:'progress', ratio: p.ratio||0});
-      }
-    });
-
-    ffmpeg.load().then(function(){
-      postMessage({type:'ready'});
-    }).catch(function(e){
-      postMessage({type:'error', msg: e.toString()});
-    });
-
-    onmessage = async function(e){
-      var d = e.data;
-      if(d.type === 'mux'){
-        try{
-          ffmpeg.FS('writeFile', 'input.webm', d.video);
-          ffmpeg.FS('writeFile', 'audio.' + d.audioExt, d.audio);
-
-          await ffmpeg.run(
-            '-i', 'input.webm',
-            '-i', 'audio.' + d.audioExt,
-            '-c:v', 'copy',
-            '-c:a', 'aac',
-            '-b:a', '192k',
-            '-shortest',
-            '-movflags', '+faststart',
-            'output.mp4'
-          );
-
-          var out = ffmpeg.FS('readFile', 'output.mp4');
-
-          try{ ffmpeg.FS('unlink','input.webm'); }catch(ex){}
-          try{ ffmpeg.FS('unlink','audio.'+d.audioExt); }catch(ex){}
-          try{ ffmpeg.FS('unlink','output.mp4'); }catch(ex){}
-
-          postMessage({type:'done', data: out.buffer}, [out.buffer]);
-        } catch(ex){
-          postMessage({type:'error', msg: ex.toString()});
-        }
-      }
-    };
-  `;
-
-  var blob = new Blob([workerCode], {type:'application/javascript'});
-  workerURL = URL.createObjectURL(blob);
-  worker = new Worker(workerURL);
-
-  worker.onmessage = function(e){
-    var d = e.data;
-    if(d.type === 'ready'){
-      ffmpegReady = true;
-      document.getElementById('infoFFmpeg').textContent = 'Ready \u2713';
-      document.getElementById('infoStatus').textContent = 'Ready';
-      setStatus('ffmpeg ready \u2713 \u2014 drop your files and hit Mux');
-      toast('ffmpeg ready \u2713');
-      checkReady();
-    } else if(d.type === 'progress'){
-      var pct = Math.round((d.ratio||0)*100);
-      document.getElementById('pbar').style.width = Math.min(90,pct)+'%';
-      document.getElementById('infoStatus').textContent = 'Muxing '+pct+'%';
-    } else if(d.type === 'done'){
-      onMuxDone(d.data);
-    } else if(d.type === 'error'){
-      onMuxError(d.msg);
-    }
-  };
-
-  worker.onerror = function(e){
-    document.getElementById('infoFFmpeg').textContent = 'Error';
-    setStatus('ffmpeg failed to load \u2014 check internet connection and refresh');
-    toast('ffmpeg load failed');
-    console.error('Worker error:', e);
-  };
-}
-
-initFFmpegWorker();
 
 // ─── MUX ─────────────────────────────────────────────────────────────────────
-async function startMux(){
-  if(!videoFile||!audioFile||!ffmpegReady||muxing) return;
-  muxing = true;
-  document.getElementById('mxBtn').disabled = true;
-  document.getElementById('pbarWrap').style.display = 'block';
-  document.getElementById('pbar').style.width = '5%';
-  document.getElementById('infoStatus').textContent = 'Reading';
-  setStatus('<span class="spinner"></span>Reading files...');
+var muxRAF = null, muxMR = null, muxChunks = [], muxStartTime = 0;
+var progressTimer = null;
 
-  try{
-    var videoData = new Uint8Array(await videoFile.arrayBuffer());
-    var audioData = new Uint8Array(await audioFile.arrayBuffer());
-    var audioExt  = audioFile.name.split('.').pop().toLowerCase() || 'mp3';
+function startMux(){
+  if(!videoFile||!audioFile||muxing) return;
+  muxing=true;
+  muxChunks=[];
 
-    setStatus('<span class="spinner"></span>Muxing video + audio \u2014 please wait...');
-    document.getElementById('infoStatus').textContent = 'Muxing';
-    document.getElementById('pbar').style.width = '10%';
+  document.getElementById('mxBtn').disabled=true;
+  document.getElementById('pbarWrap').style.display='block';
+  document.getElementById('pbar').style.width='0%';
+  document.getElementById('infoStatus').textContent='Muxing';
 
-    worker.postMessage({
-      type: 'mux',
-      video: videoData.buffer,
-      audio: audioData.buffer,
-      audioExt: audioExt
-    }, [videoData.buffer, audioData.buffer]);
+  var dur = audioDuration || videoDuration;
+  setStatus('<span class="spinner"></span>Muxing in real time \u2014 '+fmtTime(Math.round(dur))+' to go...');
 
-  } catch(e){
-    onMuxError(e.toString());
+  // Set canvas to video dimensions
+  muxC.width  = vidEl.videoWidth  || 1080;
+  muxC.height = vidEl.videoHeight || 1920;
+
+  // Create combined stream: canvas (video frames) + audio
+  var audioCtx   = new (window.AudioContext||window.webkitAudioContext)();
+  var dest        = audioCtx.createMediaStreamDestination();
+  var audioSource = audioCtx.createMediaElementSource(audEl);
+  audioSource.connect(dest);
+  audioSource.connect(audioCtx.destination); // so we can hear it
+
+  var canvasStream  = muxC.captureStream(30);
+  var audioTracks   = dest.stream.getAudioTracks();
+  audioTracks.forEach(function(t){ canvasStream.addTrack(t); });
+
+  // MediaRecorder on combined stream
+  var mimeType = 'video/webm;codecs=vp9,opus';
+  if(!MediaRecorder.isTypeSupported(mimeType)) mimeType='video/webm';
+  muxMR = new MediaRecorder(canvasStream,{mimeType:mimeType,videoBitsPerSecond:8000000});
+  muxMR.ondataavailable=function(e){if(e.data.size>0)muxChunks.push(e.data);};
+  muxMR.onstop=function(){finishMux();};
+  muxMR.start(200);
+
+  // Reset and play both
+  vidEl.currentTime=0;
+  audEl.currentTime=0;
+  vidEl.play();
+  audEl.play();
+  muxStartTime=Date.now();
+
+  // Draw video frames to canvas
+  function drawLoop(){
+    if(!muxing) return;
+    muxCtx.drawImage(vidEl,0,0,muxC.width,muxC.height);
+    muxRAF=requestAnimationFrame(drawLoop);
   }
+  drawLoop();
+
+  // Progress bar
+  progressTimer=setInterval(function(){
+    var elapsed=(Date.now()-muxStartTime)/1000;
+    var total=audioDuration||videoDuration||elapsed;
+    var pct=Math.min(98,Math.round(elapsed/total*100));
+    document.getElementById('pbar').style.width=pct+'%';
+    document.getElementById('infoStatus').textContent=fmtTime(Math.floor(elapsed))+' / '+fmtTime(Math.round(total));
+    if(elapsed>=total+0.5) stopMux();
+  },500);
+
+  // Auto stop when audio ends
+  audEl.onended=function(){ stopMux(); };
+
+  // Fallback: stop at video end if audio already ended
+  vidEl.onended=function(){
+    if(!audEl.ended) return;
+    stopMux();
+  };
 }
 
-function onMuxDone(buffer){
-  muxing = false;
-  document.getElementById('pbar').style.width = '100%';
-  var ts = Date.now();
-  var blob = new Blob([buffer], {type:'video/mp4'});
-  var a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'abbies-boon-'+ts+'.mp4';
+function stopMux(){
+  if(!muxing) return;
+  muxing=false;
+  clearInterval(progressTimer);
+  cancelAnimationFrame(muxRAF);
+  vidEl.pause();
+  audEl.pause();
+  if(muxMR&&muxMR.state!=='inactive') muxMR.stop();
+}
+
+function finishMux(){
+  document.getElementById('pbar').style.width='100%';
+  setStatus('Packaging output...');
+
+  var ts=Date.now();
+  var blob=new Blob(muxChunks,{type:'video/webm'});
+
+  // Offer download
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='abbies-boon-muxed-'+ts+'.webm';
   a.click();
-  document.getElementById('infoStatus').textContent = 'Done \u2713';
-  setStatus('MP4 downloaded \u2713 \u2014 ready to post. Drop new files to go again.');
-  toast('MP4 saved \u2713');
-  document.getElementById('mxBtn').disabled = false;
-}
 
-function onMuxError(msg){
-  muxing = false;
-  console.error('Mux error:', msg);
-  document.getElementById('infoStatus').textContent = 'Error';
-  setStatus('Mux failed \u2014 try refreshing the page');
-  toast('Mux error');
-  document.getElementById('mxBtn').disabled = false;
+  // Show preview
+  var previewUrl=URL.createObjectURL(blob);
+  var pv=document.getElementById('previewVid');
+  pv.src=previewUrl;
+  document.getElementById('previewWrap').style.display='block';
+
+  document.getElementById('infoStatus').textContent='Done \u2713';
+  setStatus('Muxed WebM downloaded \u2713 \u2014 video + audio combined. Preview below. Drop new files to go again.');
+  toast('Done \u2713 WebM saved');
+  document.getElementById('mxBtn').disabled=false;
 }
 
 // ─── UTILS ───────────────────────────────────────────────────────────────────
 function fmtSize(b){
-  if(b<1024) return b+'B';
-  if(b<1048576) return Math.round(b/1024)+'KB';
+  if(b<1024)return b+'B';
+  if(b<1048576)return Math.round(b/1024)+'KB';
   return (b/1048576).toFixed(1)+'MB';
+}
+function fmtTime(s){
+  s=Math.max(0,Math.floor(s));
+  return Math.floor(s/60)+':'+(s%60<10?'0':'')+(s%60);
 }
 function setStatus(m){document.getElementById('statusMsg').innerHTML=m;}
 function toast(m){
