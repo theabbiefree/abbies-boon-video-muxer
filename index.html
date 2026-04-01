@@ -35,8 +35,6 @@ body{font-family:'Courier New',monospace;background:#f5e6c8;color:#111;min-heigh
 .info-cell .iv{font-size:9px;color:#d4651a;font-weight:700;letter-spacing:.04em;}
 .note{font-size:7px;color:#aaa;line-height:1.8;letter-spacing:.03em;margin-top:12px;}
 .note b{color:#d4651a;}
-.note a{color:#00a8b5;text-decoration:none;}
-.note a:hover{text-decoration:underline;}
 .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(12px);background:#d4651a;color:#fff;font-family:'Courier New',monospace;font-size:9px;padding:6px 14px;border-radius:3px;letter-spacing:.06em;opacity:0;transition:all .2s;z-index:999;pointer-events:none;}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -73,21 +71,21 @@ body{font-family:'Courier New',monospace;background:#f5e6c8;color:#111;min-heigh
     <div class="info-grid">
       <div class="info-cell"><div class="ik">Video</div><div class="iv" id="infoVideo">—</div></div>
       <div class="info-cell"><div class="ik">Audio</div><div class="iv" id="infoAudio">—</div></div>
-      <div class="info-cell"><div class="ik">ffmpeg</div><div class="iv" id="infoFFmpeg">Not loaded</div></div>
-      <div class="info-cell"><div class="ik">Status</div><div class="iv" id="infoStatus">Waiting</div></div>
+      <div class="info-cell"><div class="ik">ffmpeg</div><div class="iv" id="infoFFmpeg">Loading...</div></div>
+      <div class="info-cell"><div class="ik">Status</div><div class="iv" id="infoStatus">Starting</div></div>
     </div>
 
-    <div class="status" id="statusMsg">Drop your WebM and music file to begin</div>
+    <div class="status" id="statusMsg"><span class="spinner"></span>Loading ffmpeg — please wait...</div>
     <div class="pbar-wrap" id="pbarWrap"><div class="pbar" id="pbar"></div></div>
 
     <button class="mxbtn" id="mxBtn" disabled onclick="startMux()">⚡ Mux to MP4</button>
 
     <div class="note">
-      <b>How it works:</b> ffmpeg.wasm runs the full FFmpeg tool inside your browser tab.
-      Your files never leave your machine. Video + audio are combined into a single
-      ready-to-post MP4 and downloaded to your computer.<br><br>
-      <b>First load:</b> ffmpeg.wasm downloads once and is cached by your browser.
-      Subsequent uses are instant.
+      <b>How it works:</b> FFmpeg runs entirely inside your browser tab via WebAssembly.
+      Your files never leave your machine. Video + audio are muxed into a single
+      post-ready MP4 and downloaded directly.<br><br>
+      <b>First load:</b> FFmpeg core downloads once (~10MB) and is cached.
+      Every visit after that is instant.
     </div>
 
   </div>
@@ -95,56 +93,11 @@ body{font-family:'Courier New',monospace;background:#f5e6c8;color:#111;min-heigh
 
 <div class="toast" id="T"></div>
 
-<!-- Use @ffmpeg/core directly — single-threaded build, no COOP/COEP headers needed -->
-<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.6/dist/umd/ffmpeg.js"></script>
-
 <script>
-var videoFile = null, audioFile = null;
-var ffmpegReady = false;
-var ffmpegInstance = null;
-var { FFmpeg } = FFmpegWASM;
+// ─── STATE ───────────────────────────────────────────────────────────────────
+var videoFile = null, audioFile = null, ffmpegReady = false, muxing = false;
 
-// Load ffmpeg on page load
-async function loadFFmpeg(){
-  try{
-    document.getElementById('infoFFmpeg').textContent = 'Loading...';
-    setStatus('<span class="spinner"></span>Loading ffmpeg — one-time download, please wait...');
-
-    ffmpegInstance = new FFmpeg();
-
-    ffmpegInstance.on('log', function(e){
-      console.log(e.message);
-    });
-
-    ffmpegInstance.on('progress', function(e){
-      var pct = Math.round((e.progress||0)*100);
-      document.getElementById('pbar').style.width = Math.min(95,pct)+'%';
-      document.getElementById('infoStatus').textContent = 'Muxing '+pct+'%';
-    });
-
-    // Use single-threaded core — works without COOP/COEP headers
-    await ffmpegInstance.load({
-      coreURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.12.6/dist/umd/ffmpeg-core.js',
-    });
-
-    ffmpegReady = true;
-    document.getElementById('infoFFmpeg').textContent = 'Ready \u2713';
-    document.getElementById('infoStatus').textContent = 'Ready';
-    setStatus('ffmpeg ready \u2713 \u2014 drop your files and hit Mux');
-    toast('ffmpeg ready \u2713');
-    checkReady();
-
-  } catch(e){
-    console.error('ffmpeg load error:', e);
-    document.getElementById('infoFFmpeg').textContent = 'Error';
-    setStatus('ffmpeg failed to load \u2014 check your internet connection and refresh');
-    toast('ffmpeg load failed');
-  }
-}
-
-loadFFmpeg();
-
-// Drop zones
+// ─── DROP ZONES ──────────────────────────────────────────────────────────────
 function makeDrop(id, accept, onFiles){
   var dz = document.getElementById(id);
   dz.addEventListener('dragover',function(e){e.preventDefault();dz.classList.add('over');});
@@ -178,17 +131,108 @@ makeDrop('dzAudio','audio/*',function(files){
 
 function checkReady(){
   if(videoFile && audioFile && ffmpegReady){
-    document.getElementById('mxBtn').disabled = false;
+    document.getElementById('mxBtn').disabled=false;
     setStatus('Both files loaded \u2014 hit \u26a1 Mux to MP4');
-    document.getElementById('infoStatus').textContent = 'Ready';
-  } else if(videoFile && audioFile){
-    setStatus('<span class="spinner"></span>Files loaded \u2014 waiting for ffmpeg...');
+    document.getElementById('infoStatus').textContent='Ready';
+  } else if(videoFile && audioFile && !ffmpegReady){
+    setStatus('<span class="spinner"></span>Files loaded \u2014 ffmpeg still loading, almost there...');
   }
 }
 
-async function startMux(){
-  if(!videoFile||!audioFile||!ffmpegReady){toast('Not ready yet');return;}
+// ─── FFMPEG VIA IMPORTSCRIPTS WORKER APPROACH ────────────────────────────────
+// Use a blob worker to run ffmpeg.wasm which sidesteps COOP/COEP issues
+// by using the older 0.11.x API with unpkg CDN
 
+var workerBlob, workerURL, worker;
+
+function initFFmpegWorker(){
+  // Inline worker that loads ffmpeg 0.11.x (no SharedArrayBuffer needed in this mode)
+  var workerCode = `
+    importScripts('https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js');
+
+    var ffmpeg = FFmpeg.createFFmpeg({
+      log: false,
+      progress: function(p){
+        postMessage({type:'progress', ratio: p.ratio||0});
+      }
+    });
+
+    ffmpeg.load().then(function(){
+      postMessage({type:'ready'});
+    }).catch(function(e){
+      postMessage({type:'error', msg: e.toString()});
+    });
+
+    onmessage = async function(e){
+      var d = e.data;
+      if(d.type === 'mux'){
+        try{
+          ffmpeg.FS('writeFile', 'input.webm', d.video);
+          ffmpeg.FS('writeFile', 'audio.' + d.audioExt, d.audio);
+
+          await ffmpeg.run(
+            '-i', 'input.webm',
+            '-i', 'audio.' + d.audioExt,
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-shortest',
+            '-movflags', '+faststart',
+            'output.mp4'
+          );
+
+          var out = ffmpeg.FS('readFile', 'output.mp4');
+
+          try{ ffmpeg.FS('unlink','input.webm'); }catch(ex){}
+          try{ ffmpeg.FS('unlink','audio.'+d.audioExt); }catch(ex){}
+          try{ ffmpeg.FS('unlink','output.mp4'); }catch(ex){}
+
+          postMessage({type:'done', data: out.buffer}, [out.buffer]);
+        } catch(ex){
+          postMessage({type:'error', msg: ex.toString()});
+        }
+      }
+    };
+  `;
+
+  var blob = new Blob([workerCode], {type:'application/javascript'});
+  workerURL = URL.createObjectURL(blob);
+  worker = new Worker(workerURL);
+
+  worker.onmessage = function(e){
+    var d = e.data;
+    if(d.type === 'ready'){
+      ffmpegReady = true;
+      document.getElementById('infoFFmpeg').textContent = 'Ready \u2713';
+      document.getElementById('infoStatus').textContent = 'Ready';
+      setStatus('ffmpeg ready \u2713 \u2014 drop your files and hit Mux');
+      toast('ffmpeg ready \u2713');
+      checkReady();
+    } else if(d.type === 'progress'){
+      var pct = Math.round((d.ratio||0)*100);
+      document.getElementById('pbar').style.width = Math.min(90,pct)+'%';
+      document.getElementById('infoStatus').textContent = 'Muxing '+pct+'%';
+    } else if(d.type === 'done'){
+      onMuxDone(d.data);
+    } else if(d.type === 'error'){
+      onMuxError(d.msg);
+    }
+  };
+
+  worker.onerror = function(e){
+    document.getElementById('infoFFmpeg').textContent = 'Error';
+    setStatus('ffmpeg failed to load \u2014 check internet connection and refresh');
+    toast('ffmpeg load failed');
+    console.error('Worker error:', e);
+  };
+}
+
+initFFmpegWorker();
+
+// ─── MUX ─────────────────────────────────────────────────────────────────────
+async function startMux(){
+  if(!videoFile||!audioFile||!ffmpegReady||muxing) return;
+  muxing = true;
   document.getElementById('mxBtn').disabled = true;
   document.getElementById('pbarWrap').style.display = 'block';
   document.getElementById('pbar').style.width = '5%';
@@ -196,69 +240,61 @@ async function startMux(){
   setStatus('<span class="spinner"></span>Reading files...');
 
   try{
-    var { fetchFile } = FFmpegWASM;
+    var videoData = new Uint8Array(await videoFile.arrayBuffer());
+    var audioData = new Uint8Array(await audioFile.arrayBuffer());
+    var audioExt  = audioFile.name.split('.').pop().toLowerCase() || 'mp3';
 
-    var audioExt = audioFile.name.split('.').pop().toLowerCase() || 'mp3';
-
-    setStatus('<span class="spinner"></span>Writing to virtual filesystem...');
-    await ffmpegInstance.writeFile('input.webm', await fetchFile(videoFile));
-    await ffmpegInstance.writeFile('audio.'+audioExt, await fetchFile(audioFile));
-
-    document.getElementById('pbar').style.width = '15%';
-    setStatus('<span class="spinner"></span>Muxing video + audio into MP4...');
+    setStatus('<span class="spinner"></span>Muxing video + audio \u2014 please wait...');
     document.getElementById('infoStatus').textContent = 'Muxing';
+    document.getElementById('pbar').style.width = '10%';
 
-    await ffmpegInstance.exec([
-      '-i', 'input.webm',
-      '-i', 'audio.'+audioExt,
-      '-c:v', 'copy',
-      '-c:a', 'aac',
-      '-b:a', '192k',
-      '-shortest',
-      '-movflags', '+faststart',
-      'output.mp4'
-    ]);
-
-    document.getElementById('pbar').style.width = '90%';
-    setStatus('<span class="spinner"></span>Reading output...');
-
-    var data = await ffmpegInstance.readFile('output.mp4');
-
-    // Clean up
-    try{ await ffmpegInstance.deleteFile('input.webm'); }catch(e){}
-    try{ await ffmpegInstance.deleteFile('audio.'+audioExt); }catch(e){}
-    try{ await ffmpegInstance.deleteFile('output.mp4'); }catch(e){}
-
-    document.getElementById('pbar').style.width = '100%';
-
-    var ts = Date.now();
-    var blob = new Blob([data.buffer], {type:'video/mp4'});
-    var a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'abbies-boon-'+ts+'.mp4';
-    a.click();
-
-    document.getElementById('infoStatus').textContent = 'Done \u2713';
-    setStatus('MP4 downloaded \u2713 \u2014 ready to post. Drop new files to go again.');
-    toast('MP4 saved \u2713');
-    document.getElementById('mxBtn').disabled = false;
+    worker.postMessage({
+      type: 'mux',
+      video: videoData.buffer,
+      audio: audioData.buffer,
+      audioExt: audioExt
+    }, [videoData.buffer, audioData.buffer]);
 
   } catch(e){
-    console.error('Mux error:', e);
-    document.getElementById('infoStatus').textContent = 'Error';
-    setStatus('Mux failed \u2014 check browser console for details');
-    document.getElementById('mxBtn').disabled = false;
-    toast('Mux error \u2014 see console');
+    onMuxError(e.toString());
   }
 }
 
+function onMuxDone(buffer){
+  muxing = false;
+  document.getElementById('pbar').style.width = '100%';
+  var ts = Date.now();
+  var blob = new Blob([buffer], {type:'video/mp4'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'abbies-boon-'+ts+'.mp4';
+  a.click();
+  document.getElementById('infoStatus').textContent = 'Done \u2713';
+  setStatus('MP4 downloaded \u2713 \u2014 ready to post. Drop new files to go again.');
+  toast('MP4 saved \u2713');
+  document.getElementById('mxBtn').disabled = false;
+}
+
+function onMuxError(msg){
+  muxing = false;
+  console.error('Mux error:', msg);
+  document.getElementById('infoStatus').textContent = 'Error';
+  setStatus('Mux failed \u2014 try refreshing the page');
+  toast('Mux error');
+  document.getElementById('mxBtn').disabled = false;
+}
+
+// ─── UTILS ───────────────────────────────────────────────────────────────────
 function fmtSize(b){
-  if(b<1024)return b+'B';
-  if(b<1048576)return Math.round(b/1024)+'KB';
+  if(b<1024) return b+'B';
+  if(b<1048576) return Math.round(b/1024)+'KB';
   return (b/1048576).toFixed(1)+'MB';
 }
 function setStatus(m){document.getElementById('statusMsg').innerHTML=m;}
-function toast(m){var t=document.getElementById('T');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2800);}
+function toast(m){
+  var t=document.getElementById('T');t.textContent=m;t.classList.add('show');
+  setTimeout(function(){t.classList.remove('show');},2800);
+}
 </script>
 </body>
 </html>
