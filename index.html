@@ -139,7 +139,7 @@ async function initFFmpeg() {
     setStatus('<span class="spinner"></span>Initializing FFmpeg...', 'loading');
     
     // Set CoreURL to local directory
-    ffmpeg.setCorePath('./');
+    ffmpeg.setCorePath('https://theabbiefree.github.io/abbies-boon-video-muxer/');
     
     await ffmpeg.load();
     ffmpegReady = true;
