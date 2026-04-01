@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>abbies® Boon Video Muxer</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Courier New',monospace;background:#f5e6c8;color:#111;min-height:100vh;display:flex;flex-direction:column;}
+.hdr{display:flex;align-items:center;gap:12px;padding:0 14px;background:#f0dbb0;border-bottom:3px solid #d4651a;height:54px;flex-shrink:0;}
+.ht h1{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#d4651a;line-height:1.3;}
+.ht p{font-size:7px;color:#00a8b5;letter-spacing:.14em;text-transform:uppercase;}
+.hsp{flex:1;}
+.main{flex:1;display:flex;align-items:center;justify-content:center;padding:30px 20px;}
+.card{background:#f0dbb0;border:2px solid #d4b890;border-radius:6px;width:100%;max-width:560px;padding:24px;}
+.sec{font-size:7px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#d4651a;display:block;margin:18px 0 8px;}
+.sec:first-child{margin-top:0;}
+.hr{height:1px;background:#d4b890;margin:18px 0;}
+.drop-zone{border:2px dashed #d4b890;border-radius:4px;padding:22px 16px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:8px;}
+.drop-zone:hover,.drop-zone.over{border-color:#d4651a;background:#f5dfc0;}
+.drop-zone .di{font-size:28px;margin-bottom:6px;}
+.drop-zone .dt{font-size:8px;color:#999;letter-spacing:.06em;text-transform:uppercase;line-height:1.6;}
+.drop-zone.has-file{border-color:#d4651a;}
+.drop-zone.has-file .dt{color:#d4651a;font-weight:700;}
+.drop-zone.sm{padding:12px 16px;}
+.drop-zone.sm .dt{font-size:8px;}
+.mxbtn{width:100%;padding:14px;background:#d4651a;border:3px solid #d4651a;border-radius:3px;color:#fff;font-family:'Courier New',monospace;font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;margin-bottom:8px;transition:all .15s;}
+.mxbtn:hover{background:#e8823a;border-color:#e8823a;}
+.mxbtn:disabled{opacity:.28;cursor:default;}
+.status{font-size:8px;color:#00a8b5;background:#e8f8f8;border:1px solid #b8e8ee;border-radius:3px;padding:6px 10px;margin-bottom:10px;letter-spacing:.04em;min-height:26px;line-height:1.7;}
+.pbar-wrap{background:#e0d0b8;border-radius:2px;height:8px;margin-bottom:10px;overflow:hidden;display:none;}
+.pbar{height:100%;background:#d4651a;width:0%;transition:width .3s;}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:12px;}
+.info-cell{background:#f5e6c8;border:1px solid #d4b890;border-radius:3px;padding:6px 8px;}
+.info-cell .ik{font-size:6px;color:#999;letter-spacing:.1em;text-transform:uppercase;margin-bottom:2px;}
+.info-cell .iv{font-size:9px;color:#d4651a;font-weight:700;letter-spacing:.04em;}
+.note{font-size:7px;color:#aaa;line-height:1.8;letter-spacing:.03em;margin-top:12px;}
+.note b{color:#d4651a;}
+.note a{color:#00a8b5;text-decoration:none;}
+.note a:hover{text-decoration:underline;}
+.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(12px);background:#d4651a;color:#fff;font-family:'Courier New',monospace;font-size:9px;padding:6px 14px;border-radius:3px;letter-spacing:.06em;opacity:0;transition:all .2s;z-index:999;pointer-events:none;}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+@keyframes spin{to{transform:rotate(360deg);}}
+.spinner{display:inline-block;width:10px;height:10px;border:2px solid rgba(0,168,181,.3);border-top-color:#00a8b5;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:5px;}
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="ht">
+    <h1>abbies® Boon Video Muxer</h1>
+    <p>WebM + Audio → MP4 · Runs in browser · No upload</p>
+  </div>
+  <div class="hsp"></div>
+</div>
+
+<div class="main">
+  <div class="card">
+
+    <span class="sec">Video File</span>
+    <div class="drop-zone" id="dzVideo">
+      <div class="di">🎬</div>
+      <div class="dt" id="dzVideoLabel">Drop your .webm video file here<br>from Boon Video Studio ZIP</div>
+    </div>
+
+    <span class="sec">Audio File</span>
+    <div class="drop-zone sm" id="dzAudio">
+      <div class="di" style="font-size:20px;">🎵</div>
+      <div class="dt" id="dzAudioLabel">Drop your music file · MP3 / WAV / OGG</div>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="info-grid">
+      <div class="info-cell"><div class="ik">Video</div><div class="iv" id="infoVideo">—</div></div>
+      <div class="info-cell"><div class="ik">Audio</div><div class="iv" id="infoAudio">—</div></div>
+      <div class="info-cell"><div class="ik">ffmpeg</div><div class="iv" id="infoFFmpeg">Not loaded</div></div>
+      <div class="info-cell"><div class="ik">Status</div><div class="iv" id="infoStatus">Waiting</div></div>
+    </div>
+
+    <div class="status" id="statusMsg">Drop your WebM and music file to begin</div>
+    <div class="pbar-wrap" id="pbarWrap"><div class="pbar" id="pbar"></div></div>
+
+    <button class="mxbtn" id="mxBtn" disabled onclick="startMux()">⚡ Mux to MP4</button>
+
+    <div class="note">
+      <b>How it works:</b> ffmpeg.wasm runs the full FFmpeg tool inside your browser tab.
+      Your files never leave your machine. Video + audio are combined into a single
+      ready-to-post MP4 and downloaded to your computer.<br><br>
+      <b>Requires:</b> This tool must be opened from a web server (GitHub Pages, localhost)
+      not a local file:// path. All abbies® tools on
+      <a href="https://theabbiefree.github.io" target="_blank">theabbiefree.github.io</a>
+      work automatically.<br><br>
+      <b>First load:</b> ffmpeg.wasm (~30MB) downloads once and is cached by your browser.
+      Subsequent uses are instant.
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="T"></div>
+
+<script>
+// ─── STATE ───────────────────────────────────────────────────────────────────
+var videoFile = null, audioFile = null;
+var ffmpegLoaded = false, ffmpegLoading = false;
+var ffmpeg = null;
+
+// ─── DROP ZONES ──────────────────────────────────────────────────────────────
+function makeDrop(id, accept, onFiles){
+  var dz = document.getElementById(id);
+  dz.addEventListener('dragover',function(e){e.preventDefault();dz.classList.add('over');});
+  dz.addEventListener('dragleave',function(){dz.classList.remove('over');});
+  dz.addEventListener('drop',function(e){
+    e.preventDefault();dz.classList.remove('over');
+    onFiles(Array.from(e.dataTransfer.files));
+  });
+  dz.addEventListener('click',function(){
+    var inp=document.createElement('input');inp.type='file';inp.accept=accept;
+    inp.onchange=function(e){onFiles(Array.from(e.target.files));};inp.click();
+  });
+}
+
+makeDrop('dzVideo','video/*,.webm',function(files){
+  var f=files.find(function(f){
+    return f.type.startsWith('video/')||f.name.match(/\.(webm|mp4|mov|avi)$/i);
+  });
+  if(!f){toast('Drop a video file (.webm)');return;}
+  videoFile=f;
+  document.getElementById('dzVideoLabel').textContent=f.name+' \u00b7 '+fmtSize(f.size);
+  document.getElementById('dzVideo').classList.add('has-file');
+  document.getElementById('infoVideo').textContent=f.name.split('.').pop().toUpperCase()+' \u00b7 '+fmtSize(f.size);
+  checkReady();
+});
+
+makeDrop('dzAudio','audio/*',function(files){
+  var f=files.find(function(f){
+    return f.type.startsWith('audio/')||f.name.match(/\.(mp3|wav|ogg|m4a|aac)$/i);
+  });
+  if(!f){toast('Drop an audio file');return;}
+  audioFile=f;
+  document.getElementById('dzAudioLabel').textContent=f.name+' \u00b7 '+fmtSize(f.size);
+  document.getElementById('dzAudio').classList.add('has-file');
+  document.getElementById('infoAudio').textContent=f.name.split('.').pop().toUpperCase()+' \u00b7 '+fmtSize(f.size);
+  checkReady();
+});
+
+function checkReady(){
+  if(videoFile&&audioFile){
+    document.getElementById('mxBtn').disabled=false;
+    setStatus('Both files loaded \u2014 hit Mux to MP4');
+    document.getElementById('infoStatus').textContent='Ready';
+    // Start loading ffmpeg in background as soon as both files are ready
+    if(!ffmpegLoaded&&!ffmpegLoading) loadFFmpeg();
+  }
+}
+
+// ─── FFMPEG LOAD ─────────────────────────────────────────────────────────────
+function loadFFmpeg(){
+  ffmpegLoading=true;
+  setStatus('<span class="spinner"></span>Loading ffmpeg.wasm (~30MB) \u2014 one-time download...');
+  document.getElementById('infoFFmpeg').textContent='Loading...';
+  document.getElementById('infoStatus').textContent='Loading ffmpeg';
+
+  // Load ffmpeg.wasm from CDN
+  var script=document.createElement('script');
+  script.src='https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
+  script.onload=function(){
+    ffmpeg=FFmpeg.createFFmpeg({
+      log:false,
+      progress:function(p){
+        var pct=Math.round((p.ratio||0)*100);
+        document.getElementById('pbar').style.width=pct+'%';
+        document.getElementById('infoStatus').textContent='Muxing '+pct+'%';
+      }
+    });
+    ffmpeg.load().then(function(){
+      ffmpegLoaded=true;ffmpegLoading=false;
+      document.getElementById('infoFFmpeg').textContent='Ready \u2713';
+      document.getElementById('infoStatus').textContent='Ready';
+      setStatus('ffmpeg loaded \u2713 \u2014 hit Mux to MP4');
+      toast('ffmpeg ready \u2713');
+    }).catch(function(e){
+      ffmpegLoading=false;
+      document.getElementById('infoFFmpeg').textContent='Error';
+      setStatus('ffmpeg load error \u2014 check you are on a web server (not file://)');
+      toast('ffmpeg load failed');
+      console.error(e);
+    });
+  };
+  script.onerror=function(){
+    ffmpegLoading=false;
+    document.getElementById('infoFFmpeg').textContent='CDN error';
+    setStatus('Could not load ffmpeg \u2014 check internet connection');
+  };
+  document.head.appendChild(script);
+}
+
+// ─── MUX ─────────────────────────────────────────────────────────────────────
+async function startMux(){
+  if(!videoFile||!audioFile){toast('Need both files');return;}
+
+  if(!ffmpegLoaded){
+    if(!ffmpegLoading) loadFFmpeg();
+    setStatus('<span class="spinner"></span>ffmpeg loading \u2014 please wait then try again...');
+    return;
+  }
+
+  document.getElementById('mxBtn').disabled=true;
+  document.getElementById('pbarWrap').style.display='block';
+  document.getElementById('pbar').style.width='0%';
+  document.getElementById('infoStatus').textContent='Reading files';
+  setStatus('<span class="spinner"></span>Reading files...');
+
+  try{
+    // Read files as Uint8Array
+    var videoData=new Uint8Array(await videoFile.arrayBuffer());
+    var audioData=new Uint8Array(await audioFile.arrayBuffer());
+
+    // Get audio extension
+    var audioExt=audioFile.name.split('.').pop().toLowerCase()||'mp3';
+
+    setStatus('<span class="spinner"></span>Writing to ffmpeg virtual filesystem...');
+    document.getElementById('infoStatus').textContent='Preparing';
+
+    // Write to ffmpeg virtual FS
+    ffmpeg.FS('writeFile','input.webm',videoData);
+    ffmpeg.FS('writeFile','audio.'+audioExt,audioData);
+
+    setStatus('<span class="spinner"></span>Muxing video + audio \u2014 this takes a moment...');
+    document.getElementById('infoStatus').textContent='Muxing';
+    document.getElementById('pbar').style.width='10%';
+
+    // Run ffmpeg — combine video stream from webm + audio from music file
+    // -shortest: trim to shortest stream so they stay in sync
+    await ffmpeg.run(
+      '-i','input.webm',
+      '-i','audio.'+audioExt,
+      '-c:v','copy',        // copy video stream as-is, no re-encode
+      '-c:a','aac',         // encode audio to AAC (MP4 compatible)
+      '-b:a','192k',        // good quality audio
+      '-shortest',          // match shortest stream
+      '-movflags','+faststart', // web-optimised MP4
+      'output.mp4'
+    );
+
+    document.getElementById('pbar').style.width='90%';
+    setStatus('<span class="spinner"></span>Reading output...');
+
+    // Read output
+    var outputData=ffmpeg.FS('readFile','output.mp4');
+
+    // Clean up virtual FS
+    try{ffmpeg.FS('unlink','input.webm');}catch(e){}
+    try{ffmpeg.FS('unlink','audio.'+audioExt);}catch(e){}
+    try{ffmpeg.FS('unlink','output.mp4');}catch(e){}
+
+    document.getElementById('pbar').style.width='100%';
+
+    // Download
+    var ts=Date.now();
+    var blob=new Blob([outputData.buffer],{type:'video/mp4'});
+    var a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='abbies-boon-'+ts+'.mp4';
+    a.click();
+
+    document.getElementById('infoStatus').textContent='Done \u2713';
+    setStatus('MP4 downloaded \u2713 \u2014 ready to post. Drop new files to go again.');
+    toast('MP4 saved \u2713');
+    document.getElementById('mxBtn').disabled=false;
+
+  } catch(e){
+    console.error(e);
+    document.getElementById('infoStatus').textContent='Error';
+    setStatus('Mux failed \u2014 check console. Try: must run from web server not file://');
+    document.getElementById('mxBtn').disabled=false;
+    toast('Mux error \u2014 see console');
+  }
+}
+
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+function fmtSize(b){
+  if(b<1024)return b+'B';
+  if(b<1048576)return Math.round(b/1024)+'KB';
+  return (b/1048576).toFixed(1)+'MB';
+}
+function setStatus(m){document.getElementById('statusMsg').innerHTML=m;}
+function toast(m){
+  var t=document.getElementById('T');t.textContent=m;t.classList.add('show');
+  setTimeout(function(){t.classList.remove('show');},2800);
+}
+</script>
+</body>
+</html>
