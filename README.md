@@ -1,8 +1,8 @@
 # abbies® Boon Video Muxer
 
-**Combine your WebM video and music into a single post-ready MP4 — runs entirely in your browser.**
+**Combine your WebM video and music into a single WebM video — runs entirely in your browser.**
 
-Drop your video. Drop your music. Hit Mux. Download your MP4.
+Drop your video. Drop your music. Hit Mux. Download your WebM.
 
 ⚡ **[Open the Muxer](https://theabbiefree.github.io/abbies-boon-video-muxer)**
 
@@ -10,7 +10,7 @@ Drop your video. Drop your music. Hit Mux. Download your MP4.
 
 ## What It Does
 
-Boon Video Muxer takes the WebM video from **abbies® Boon Video Studio** and your music file and combines them into a single MP4 — one file, ready to post to Instagram Reels, TikTok, YouTube Shorts, or anywhere else.
+Boon Video Muxer takes the WebM video from **abbies® Boon Video Studio** and your music file and combines them into a single WebM — one file, ready to drop into CapCut, CloudConver, VEED or anywhere else.
 
 No upload. No account. No subscription. Your files never leave your machine. Everything runs inside your browser tab using ffmpeg.wasm — the full professional FFmpeg tool compiled to run locally.
 
@@ -26,9 +26,9 @@ No upload. No account. No subscription. Your files never leave your machine. Eve
 On your first visit ffmpeg.wasm downloads (~30MB) and is cached by your browser. The status panel shows when it's ready. Every visit after that is instant.
 
 ### 3. Hit Mux
-Press **⚡ Mux to MP4** — ffmpeg combines your video and audio streams into a single optimised MP4 and downloads it to your machine.
+Press **⚡ Mux Together** — ffmpeg combines your video and audio streams into a single optimised WebM and downloads it to your machine.
 
-That's it. Your MP4 is ready to post.
+That's it. Your WebM is ready to go.
 
 ---
 
@@ -44,12 +44,12 @@ abbies® Boon Video Studio
         ↓
 abbies® Boon Video Muxer
         ↓
-   Post-ready MP4
+   Listen-ready WebM
 ```
 
 **[Boon Video Studio](https://theabbiefree.github.io/abbies-boon-video-studio)** generates your music-reactive video from your design images and exports a ZIP containing the WebM and your music file.
 
-**Boon Video Muxer** (this tool) takes those two files and delivers a single finished MP4.
+**Boon Video Muxer** (this tool) takes those two files and delivers a single finished WebM.
 
 ---
 
@@ -71,7 +71,7 @@ abbies® Boon Video Muxer
 | Tool | Description |
 |------|-------------|
 | [Boon Video Studio](https://theabbiefree.github.io/abbies-boon-video-studio) | Generate music-reactive videos from your images |
-| [Boon Video Muxer](https://theabbiefree.github.io/abbies-boon-video-muxer) | Combine WebM + audio into a post-ready MP4 |
+| [Boon Video Muxer](https://theabbiefree.github.io/abbies-boon-video-muxer) | Combine WebM + audio into a audio-ready WebM|
 | [Boon Design Studio](https://theabbiefree.github.io/abbies-boon-design-studio) | Stamp and compose your kaleidoscope designs |
 | [Pattern Boon Studio](https://theabbiefree.github.io/Pattern-Boon-Studio) | Upload, tile, watermark, export |
 | [Image Boon Transformer](https://theabbiefree.github.io/Image-Boon-Transformer) | Bulk resize, watermark, and export |
